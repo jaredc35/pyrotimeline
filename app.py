@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import datetime as dt
+import dataHandler as dh
 
 _ = """
 The purpose of this app is to allow someone
@@ -37,70 +38,36 @@ column_config = {
          )
 }
 
-def convert_to_seconds(time_str):
-    """
-    Converts a time string to seconds
-    """
-    time_str = time_str.split(":")
-    return int(time_str[0]) * 60 + int(time_str[1])
 
-def convert_to_display_time(time_int):
-    """
-    Convert an integer of seconds
-    to a display time string of
-    the format 'MM:SS'
-    """
-    min = int(time_int / 60)
-    sec = int(time_int % 60)
-    return f"{min}:{sec}"
-
-def import_fireworks_data():
-  df = pd.read_csv("show_planner_2024.csv")
-  
-  # Select only the specified columns
-  df = df[["Firework Name", "Type", "Effect Duration", "Effect Time"]]
-  
-  # Rename the columns
-  df.rename(columns={
-    "Firework Name": "firework_name", 
-    "Effect Duration": "duration",
-    "Type":"type",
-    "Effect Time": "start_time"}, 
-    inplace=True)
-  
-  df.dropna(inplace=True)
-  
-  # Convert columns to usable time
-  df['duration'] = pd.to_numeric(pd.to_datetime(df['duration'], format='%M:%S').dt.strftime("%S"), errors='coerce').fillna(0)
-  df['display_start_time'] = pd.to_datetime(df['start_time'], format='%M:%S').dt.strftime("%M:%S")
-  df['start_time'] = df['display_start_time'].apply(convert_to_seconds)
-  df['end_time'] = df['start_time'] + df['duration']
-  df['display_end_time'] = df['end_time'].apply(convert_to_display_time)
-
-
-  return df
 
 def add_new_firework(name, type, duration, display_start_time):
     """
     Add a new firework to the firework session state
     """
-    st.session_state['fireworks_df'] = st.session_state['fireworks_df'].append({
-        "firework_name": name,
+    dh.add_firework({"firework_name": name,
         "type": type,
         "duration": duration,
         "display_start_time": display_start_time,
-        "start_time": convert_to_seconds(display_start_time),
-        "end_time": convert_to_seconds(display_start_time) + duration,
-        "display_end_time": convert_to_display_time(convert_to_seconds(display_start_time) + duration)
-    }, ignore_index=True)
+        "start_time": dh.convert_to_seconds(display_start_time),
+        "end_time": dh.convert_to_seconds(display_start_time) + duration,
+        "display_end_time": dh.convert_to_display_time(dh.convert_to_seconds(display_start_time) + duration)})
+    st.session_state['fireworks_df'] = dh.get_fireworks_df()
 
+def update_firework(id, name, type, duration, display_start_time):
+    """
+    Update a firework in the firework session state
+    """
+    dh.update_firework(id, name, type, duration, display_start_time)
+    st.session_state['fireworks_df'] = dh.get_fireworks_df()
 def main(): 
     # Initialization
     st.set_page_config(page_title="Fireworks Show", page_icon=":fireworks:", layout="wide")
     if 'fireworks_df' not in st.session_state:
-        st.session_state['fireworks_df'] = import_fireworks_data()
+        st.session_state['fireworks_df'] = dh.get_fireworks_df()
     if 'firework_action' not in st.session_state:
         st.session_state['firework_action'] = "Add New Firework"
+    if 'firework_types' not in st.session_state:
+        st.session_state['firework_types'] = ['Rocket', "Cake", "Shells", "Sequencer", "Fireball", "Fountains"]
 
     st.header("Richard's Fireworks Timeline!")
     
@@ -113,13 +80,21 @@ def main():
 
         with col2:
             if st.session_state['firework_action'] == "Edit Firework":
-                st.button("Edit Firework")
+                firework_to_edit = st.selectbox("Select a firework",st.session_state['fireworks_df']['firework_name'].unique())
+                old_firework = dh.get_firework_by_name(firework_to_edit)
+                new_name = st.text_input("Firework Name", old_firework['firework_name'][0])
+                new_type = st.selectbox("Type", st.session_state['firework_types'] , index=st.session_state['firework_types'].index(old_firework['type'][0]))
+                new_duration = st.number_input("Duration (in seconds)", min_value=0, max_value=150, value=old_firework['duration'][0])
+                new_start_time = st.text_input("Start Time", placeholder="Please enter a time in MM:SS format", value=old_firework['display_start_time'][0])
+                st.button("Update Firework", on_click=lambda: update_firework(old_firework["_id"][0], new_name, new_type, new_duration, new_start_time))
+            
             if st.session_state['firework_action'] == "Add New Firework":
                 new_name = st.text_input("Firework Name")
                 type = st.selectbox("Type", ['Rocket', "Cake", "Shells", "Sequencer", "Fireball", "Fountains"])
                 duration = st.number_input("Duration (in seconds)", min_value=0, max_value=150)
                 start_time = st.text_input("Start Time", placeholder="Please enter a time in MM:SS format")
                 st.button("Add New Firework",on_click=lambda: add_new_firework(new_name, type, duration, start_time))
+            
             if st.session_state['firework_action'] == "Remove Firework":
                 st.button("Remove Firework")
             if st.session_state['firework_action'] == "Clear Fireworks":
@@ -128,18 +103,15 @@ def main():
     with st.container():
         st.dataframe(st.session_state['fireworks_df'], 
                     use_container_width=True,
+                    column_order=['firework_name', 'type', 'duration', 'display_start_time', "display_end_time"],
                     )
         
-    st.write(st.session_state['fireworks_df']['start_time'][0])
     chart = alt.Chart(st.session_state['fireworks_df']).mark_bar().encode(
         x='start_time',
         x2='end_time',
         y='firework_name',
     )
     st.altair_chart(chart, theme="streamlit", use_container_width=True)
-
-
-    st.write(st.session_state)
 
 
 if __name__ == "__main__":
