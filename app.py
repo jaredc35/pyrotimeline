@@ -1,7 +1,5 @@
 import streamlit as st
-import pandas as pd
 import altair as alt
-from datetime import datetime as dt
 import dataHandler as dh
 
 _ = """
@@ -205,6 +203,7 @@ def main():
             x2="end_time",
             y="firework_name",
         )
+        .interactive()
     )
     st.altair_chart(chart, theme="streamlit", use_container_width=True)
 

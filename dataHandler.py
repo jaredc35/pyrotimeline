@@ -1,11 +1,6 @@
 import pymongo
-import os
 import pandas as pd
-from dotenv import load_dotenv
 import streamlit as st
-
-load_dotenv()
-
 
 MONGODB_KEY = st.secrets["MONGODB_KEY"]
 myclient = pymongo.MongoClient(
