@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 
 MONGODB_KEY = st.secrets["MONGODB_KEY"]
+
 myclient = pymongo.MongoClient(
     "mongodb+srv://admin-jared:"
     + MONGODB_KEY
@@ -10,6 +11,13 @@ myclient = pymongo.MongoClient(
 )
 pyroDB = myclient["PyroTimeline"]
 fireworkCollection = pyroDB["fireworkCollection"]
+
+blank_firework = {
+    "name": "",
+    "type": "Rocket",
+    "duration": 0,
+    "display_start_time": "",
+}
 
 
 def convert_to_seconds(time_str):
@@ -100,6 +108,7 @@ def add_firework(name, type, duration, display_start_time):
     }
     result = fireworkCollection.insert_one(firework_dict)
     st.session_state["fireworks_df"] = get_fireworks_df()
+    st.session_state["user_input_firework"] = blank_firework
     return result
 
 
@@ -155,7 +164,8 @@ def update_firework(id, name, type, duration, display_start_time):
         }
     }
     result = fireworkCollection.update_one(query, new_values)
-    print(result.modified_count, " records updated.")
+    st.session_state["fireworks_df"] = get_fireworks_df()
+    st.session_state["firework_to_edit"] = None
     return result
 
 

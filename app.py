@@ -1,6 +1,7 @@
 import streamlit as st
 import altair as alt
 import dataHandler as dh
+import components as co
 
 _ = """
 The purpose of this app is to allow someone
@@ -41,34 +42,6 @@ column_config = {
 }
 
 
-# def add_new_firework(name, type, duration, display_start_time):
-#     """
-#     Add a new firework to the firework session state
-#     """
-#     dh.add_firework(
-#         {
-#             "firework_name": name,
-#             "type": type,
-#             "duration": duration,
-#             "display_start_time": display_start_time,
-#             "start_time": dh.convert_to_seconds(display_start_time),
-#             "end_time": dh.convert_to_seconds(display_start_time) + duration,
-#             "display_end_time": dh.convert_to_display_time(
-#                 dh.convert_to_seconds(display_start_time) + duration
-#             ),
-#         }
-#     )
-# st.session_state["fireworks_df"] = dh.get_fireworks_df()
-
-
-def update_firework(id, name, type, duration, display_start_time):
-    """
-    Update a firework in the firework session state
-    """
-    dh.update_firework(id, name, type, duration, display_start_time)
-    st.session_state["fireworks_df"] = dh.get_fireworks_df()
-
-
 def main():
     # Initialization
     st.set_page_config(
@@ -87,6 +60,10 @@ def main():
             "Fireball",
             "Fountains",
         ]
+    if "user_input_firework" not in st.session_state:
+        st.session_state["user_input_firework"] = dh.blank_firework
+    if "firework_to_edit" not in st.session_state:
+        st.session_state["firework_to_edit"] = None
 
     st.header("Richard's Fireworks Timeline!")
 
@@ -108,46 +85,53 @@ def main():
 
             # Edit an existing firework
             if st.session_state["firework_action"] == "Edit Firework":
-                firework_to_edit = st.selectbox(
+                st.session_state["firework_to_edit"] = st.selectbox(
                     "Select a firework",
                     st.session_state["fireworks_df"]["firework_name"],
+                    index=None,
                 )
-                old_firework = dh.get_firework_by_name(firework_to_edit)
-                new_name = st.text_input(
-                    "Firework Name", old_firework["firework_name"][0]
-                )
-                new_type = st.selectbox(
-                    "Type",
-                    st.session_state["firework_types"],
-                    index=st.session_state["firework_types"].index(
-                        old_firework["type"][0]
-                    ),
-                )
-                new_duration = st.number_input(
-                    "Duration (in seconds)",
-                    min_value=0,
-                    max_value=150,
-                    value=old_firework["duration"][0],
-                )
-                new_start_time = st.text_input(
-                    "Start Time",
-                    placeholder="Please enter a time in MM:SS format",
-                    value=old_firework["display_start_time"][0],
-                )
-                st.button(
-                    "Update Firework",
-                    on_click=lambda: update_firework(
-                        old_firework["_id"][0],
-                        new_name,
-                        new_type,
-                        new_duration,
-                        new_start_time,
-                    ),
-                )
+                if st.session_state["firework_to_edit"]:
+                    old_firework = dh.get_firework_by_name(
+                        st.session_state["firework_to_edit"]
+                    )
+                    new_name = st.text_input(
+                        "Firework Name",
+                        old_firework["firework_name"][0],
+                    )
+                    new_type = st.selectbox(
+                        "Type",
+                        st.session_state["firework_types"],
+                        index=st.session_state["firework_types"].index(
+                            old_firework["type"][0]
+                        ),
+                    )
+                    new_duration = st.number_input(
+                        "Duration (in seconds)",
+                        min_value=0,
+                        max_value=150,
+                        value=old_firework["duration"][0],
+                    )
+                    new_start_time = st.text_input(
+                        "Start Time",
+                        placeholder="Please enter a time in MM:SS format",
+                        value=old_firework["display_start_time"][0],
+                    )
+                    st.button(
+                        "Update Firework",
+                        on_click=lambda: dh.update_firework(
+                            old_firework["_id"][0],
+                            new_name,
+                            new_type,
+                            new_duration,
+                            new_start_time,
+                        ),
+                    )
 
             # Add a new firework
             if st.session_state["firework_action"] == "Add New Firework":
-                new_name = st.text_input("Firework Name")
+                st.session_state["user_input_firework"]["name"] = st.text_input(
+                    "Firework Name"
+                )
                 type = st.selectbox(
                     "Type",
                     ["Rocket", "Cake", "Shells", "Sequencer", "Fireball", "Fountains"],
@@ -161,7 +145,10 @@ def main():
                 st.button(
                     "Add New Firework",
                     on_click=lambda: dh.add_firework(
-                        new_name, type, duration, start_time
+                        st.session_state["user_input_firework"]["name"],
+                        type,
+                        duration,
+                        start_time,
                     ),
                 )
 
@@ -185,10 +172,34 @@ def main():
                     on_click=lambda: dh.import_fireworks_data_from_csv(),
                 )
 
+    def assign_firework(event):
+        st.session_state["firework_action"] = "edit_firework"
+        st.session_state["firework_to_edit"] = event.data["firework_name"]
+
+    chart = (
+        alt.Chart(
+            st.session_state["fireworks_df"],
+        )
+        .mark_bar(cornerRadius=3, height=10)
+        .encode(
+            x=alt.X("start_time", title="Start Time"),
+            x2=alt.X2("end_time", title="End Time"),
+            y=alt.Y("firework_name", title="Firework Name").sort("x"),
+            color=alt.Color("type", title="Type of Firework"),
+        )
+    )
+    st.altair_chart(
+        chart,
+        theme="streamlit",
+        # on_select=lambda event: assign_firework(event),
+        use_container_width=True,
+    )
+
     with st.container():
-        st.data_editor(
+        st.dataframe(
             st.session_state["fireworks_df"],
             use_container_width=True,
+            hide_index=True,
             column_config=column_config,
             column_order=[
                 "firework_name",
@@ -198,18 +209,6 @@ def main():
                 "display_end_time",
             ],
         )
-
-    chart = (
-        alt.Chart(st.session_state["fireworks_df"])
-        .mark_bar(cornerRadius=3, height=10)
-        .encode(
-            x=alt.X("start_time", title="Start Time"),
-            x2=alt.X2("end_time", title="End Time"),
-            y=alt.Y("firework_name", title="Firework Name").sort("x"),
-            color=alt.Color("type", title="Type of Firework"),
-        )
-    )
-    st.altair_chart(chart, theme="streamlit", use_container_width=True)
 
 
 if __name__ == "__main__":
