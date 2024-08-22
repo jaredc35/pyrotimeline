@@ -63,7 +63,8 @@ def import_fireworks_data_from_csv():
     df["start_time"] = df["display_start_time"].apply(convert_to_seconds)
     df["end_time"] = df["start_time"] + df["duration"]
     df["display_end_time"] = df["end_time"].apply(convert_to_display_time)
-    return df
+    import_fireworks_data_to_mongo(df)
+    return get_fireworks_df()
 
 
 def import_fireworks_data_to_mongo(fireworks_df):
@@ -82,20 +83,33 @@ def delete_items(query, printResult=True):
     return result
 
 
-def add_firework(firework_dict):
+def add_firework(name, type, duration, display_start_time):
     """
     Adds a firework to the firework collection
     """
+    firework_dict = {
+        "firework_name": name,
+        "type": type,
+        "duration": duration,
+        "display_start_time": display_start_time,
+        "start_time": convert_to_seconds(display_start_time),
+        "end_time": convert_to_seconds(display_start_time) + duration,
+        "display_end_time": convert_to_display_time(
+            convert_to_seconds(display_start_time) + duration
+        ),
+    }
     result = fireworkCollection.insert_one(firework_dict)
-    print(result.inserted_id, " record inserted.")
+    st.session_state["fireworks_df"] = get_fireworks_df()
     return result
 
 
-def delete_firework(id):
+def delete_firework(firework_name):
     """
     Deletes a firework based on the id
     """
+    id = get_firework_by_name(firework_name)["_id"][0]
     result = fireworkCollection.delete_one({"_id": id})
+    st.session_state["fireworks_df"] = get_fireworks_df()
     return result.deleted_count
 
 
@@ -105,6 +119,10 @@ def get_fireworks_df():
     """
     cursor = fireworkCollection.find({})
     df = pd.DataFrame(list(cursor))
+    if df.empty:
+        return pd.DataFrame()
+    df = df.astype({"_id": "string"})
+    df = df.sort_values(by="start_time")
     return df
 
 

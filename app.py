@@ -12,13 +12,17 @@ show.
 Created by Jared Conway
 7/10/24
 """
-# @st.experimental_memo
-# def get_chart_56029(use_container_width: bool):
 
 
 column_config = {
+    "_id": st.column_config.TextColumn(
+        "ID", help="The ID of the firework", max_chars=100
+    ),
     "firework_name": st.column_config.TextColumn(
         "Firework Name", help="The name of the firework", max_chars=100
+    ),
+    "type": st.column_config.TextColumn(
+        "Type", help="The type of the firework", max_chars=100
     ),
     "duration": st.column_config.NumberColumn(
         "Duration",
@@ -26,37 +30,35 @@ column_config = {
         min_value=0,
         max_value=150,
     ),
-    "start_time": st.column_config.NumberColumn(
+    "display_start_time": st.column_config.TextColumn(
         "Start Time",
-        min_value=0,
-        max_value=1440,
+        help="The start time of the firework in MM:SS format",
     ),
-    "end_time": st.column_config.NumberColumn(
+    "display_end_time": st.column_config.TextColumn(
         "End Time",
-        min_value=0,
-        max_value=1440,
+        help="The end time of the firework in MM:SS format",
     ),
 }
 
 
-def add_new_firework(name, type, duration, display_start_time):
-    """
-    Add a new firework to the firework session state
-    """
-    dh.add_firework(
-        {
-            "firework_name": name,
-            "type": type,
-            "duration": duration,
-            "display_start_time": display_start_time,
-            "start_time": dh.convert_to_seconds(display_start_time),
-            "end_time": dh.convert_to_seconds(display_start_time) + duration,
-            "display_end_time": dh.convert_to_display_time(
-                dh.convert_to_seconds(display_start_time) + duration
-            ),
-        }
-    )
-    st.session_state["fireworks_df"] = dh.get_fireworks_df()
+# def add_new_firework(name, type, duration, display_start_time):
+#     """
+#     Add a new firework to the firework session state
+#     """
+#     dh.add_firework(
+#         {
+#             "firework_name": name,
+#             "type": type,
+#             "duration": duration,
+#             "display_start_time": display_start_time,
+#             "start_time": dh.convert_to_seconds(display_start_time),
+#             "end_time": dh.convert_to_seconds(display_start_time) + duration,
+#             "display_end_time": dh.convert_to_display_time(
+#                 dh.convert_to_seconds(display_start_time) + duration
+#             ),
+#         }
+#     )
+# st.session_state["fireworks_df"] = dh.get_fireworks_df()
 
 
 def update_firework(id, name, type, duration, display_start_time):
@@ -64,14 +66,6 @@ def update_firework(id, name, type, duration, display_start_time):
     Update a firework in the firework session state
     """
     dh.update_firework(id, name, type, duration, display_start_time)
-    st.session_state["fireworks_df"] = dh.get_fireworks_df()
-
-
-def remove_firework(id):
-    """
-    Delete a firework from the database and update session state
-    """
-    dh.delete_firework(id)
     st.session_state["fireworks_df"] = dh.get_fireworks_df()
 
 
@@ -102,14 +96,17 @@ def main():
             st.session_state["firework_action"] = st.selectbox(
                 "Select an action",
                 [
-                    "Edit Firework",
                     "Add New Firework",
+                    "Edit Firework",
                     "Remove Firework",
                     "Clear Fireworks",
+                    "Import Firework Data",
                 ],
             )
 
         with col2:
+
+            # Edit an existing firework
             if st.session_state["firework_action"] == "Edit Firework":
                 firework_to_edit = st.selectbox(
                     "Select a firework",
@@ -148,6 +145,7 @@ def main():
                     ),
                 )
 
+            # Add a new firework
             if st.session_state["firework_action"] == "Add New Firework":
                 new_name = st.text_input("Firework Name")
                 type = st.selectbox(
@@ -162,11 +160,12 @@ def main():
                 )
                 st.button(
                     "Add New Firework",
-                    on_click=lambda: add_new_firework(
+                    on_click=lambda: dh.add_firework(
                         new_name, type, duration, start_time
                     ),
                 )
 
+            # Delete a firework
             if st.session_state["firework_action"] == "Remove Firework":
                 firework_to_delete = st.selectbox(
                     "Select a firework",
@@ -174,18 +173,23 @@ def main():
                 )
                 st.button(
                     "Remove Firework",
-                    on_click=lambda: remove_firework(
-                        dh.get_firework_by_name(firework_to_delete)["_id"][0]
-                    ),
+                    on_click=lambda: dh.delete_firework(firework_to_delete),
                 )
 
             if st.session_state["firework_action"] == "Clear Fireworks":
-                st.button("Clear Fireworks")
+                st.button("Delete all Fireworks?", on_click=lambda: dh.delete_items({}))
+
+            if st.session_state["firework_action"] == "Import Firework Data":
+                st.button(
+                    "Import all fireworks from original CSV?",
+                    on_click=lambda: dh.import_fireworks_data_from_csv(),
+                )
 
     with st.container():
-        st.dataframe(
+        st.data_editor(
             st.session_state["fireworks_df"],
             use_container_width=True,
+            column_config=column_config,
             column_order=[
                 "firework_name",
                 "type",
@@ -197,13 +201,13 @@ def main():
 
     chart = (
         alt.Chart(st.session_state["fireworks_df"])
-        .mark_bar()
+        .mark_bar(cornerRadius=3, height=10)
         .encode(
-            x="start_time",
-            x2="end_time",
-            y="firework_name",
+            x=alt.X("start_time", title="Start Time"),
+            x2=alt.X2("end_time", title="End Time"),
+            y=alt.Y("firework_name", title="Firework Name").sort("x"),
+            color=alt.Color("type", title="Type of Firework"),
         )
-        .interactive()
     )
     st.altair_chart(chart, theme="streamlit", use_container_width=True)
 
